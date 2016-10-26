@@ -1,0 +1,31 @@
+Migrar de plataforma y versión de la base de datos Oracle 11g AIX a Oracle 12c Linux (RHEL) usando ASM como almacenamiento
+- metadatos y datos de Oracle 11g AIX a Oracle 12c Linux -
+
+-- 11g (AIX)
+CREATE DATABASE LINK "LNK12C" CONNECT TO usuario IDENTIFIED BY "password" USING 'ORCL12C';
+
+-- 11g
+expdp usuario/\"password\"@orclaix directory=DATAPUMP dumpfile=esquema_full.dmp logfile=datapump2:esquema_full.log schemas=esquema
+
+donde:
+DATAPUMP = Directorio lógico dentro de ASM en AIX
+datapump2 = Directorio lógico fuera de ASM (filesystem) en AIX
+
+-- 12c (Linux)
+create directory UPG_DUMP as '+DATA';
+
+-- 11g
+execute sys.DBMS_FILE_TRANSFER.PUT_FILE('DATAPUMP','esquema_full.dmp','UPG_DUMP','esquema_full.dmp','LNK12C);
+
+--12c
+impdp usuario/\"password\"@orcllnx directory=UPG_DUMP dumpfile=esquema_full.dmp logfile=datapump2:esquema_fulli.log schemas=esquema
+
+donde:
+UPG_DUMP = Directorio lógico dentro de ASM en Linux
+datapump2 = Directorio lógico fuera de ASM (filesystem) en Linux
+
+NOTA 1: En menos de 8 hora puedes migrar más de 500GB (depende de las características de los discos de ASM y su proveedor).
+NOTA 2: Debes tener ya creado y configurado Oracle 12c en Linux
+NOTA 3: Los servidores deben poder verse entre AIX y Linux (habilitar permisos de Firewall).
+NOTA 4: Con este método se aprovecha el rendimiento/alm,almacenamiento de ASM y la velocidad de transferencia (fibra optica) 
+entre instancias de ASM. 
