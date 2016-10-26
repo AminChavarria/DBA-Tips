@@ -1,0 +1,67 @@
+Paso 1. Obtener todas las rutas absolutas de los archivos de la base de datos: datafiles, redolog files, temporales, control files, archivo de parametros (spfile) y archivo de password.
+Paso 1.1 Respaldar archivo spfile a un pfile.
+Paso 2. Detenermos las basee de datos:
+	srvctl stop database -d ORCL
+Paso 3. Obtenemos un listado de los grupo de discos antes de renombrar:
+	asmcmd lsdg
+Paso 4. Detenemos los grupos de discos a renombrar: 
+	srvctl stop diskgroup -diskgroup DATA
+Paso 5. Consultamos el estado del grupos de discos que se detuvo, debe ser OFFLINE:
+	crsctl stat res -t
+Paso 6. Renombramos los grupoas de discos en dos fases:
+					renamedg phase=one dgname=DATA newdgname=DATA_TMP asm_diskstring='/dev/disk*' config=renamedg_data_datatmp.conf verbose=true
+					renamedg phase=two dgname=DATA newdgname=DATA_TMP config=renamedg_data_datatmp.conf verbose=true
+Paso 7. Montamos los dgrupos de dsicos en modo restrictivo desde ASM:
+					alter diskgroup DATA mount restricted;
+Paso 8. Renombramos todos los discos asociados al grupo de disco que se renombro al nuevo DG:					
+					alter diskgroup DATA_TMP rename disks all;
+Paso 9. Desmontamos el disgroup nuevo:
+					alter diskgroup DATA_TMP dismount;
+Paso 10. Montamos de nuevo el grupo de discos nuevo:
+					srvctl start diskgroup -diskgroup DATA_TMP
+Paso 11. Consultamos el estado del diskgroup nuevo:
+					crsctl stat res -t
+					asmcmd lsdg
+Paso 12. Editamos el archivo de parametros respaldado, y cambiar el DG de toda las rutas que hagan referencia al disk group que se renombro:
+					--nuevo--
+					*.control_files='+DATA_TMP/ORCL/CONTROLFILE/current.282.907852425','+FRA/ORCL/CONTROLFILE/current.268.907852425'		
+Paso 13. Montamos la base de datos con el pfile que se modifico:
+Paso 14. Ejecutamos consulta para generar script de renombrado de archivos de la base de datos:
+
+set heading off
+col sql for a200
+SET HEADING OFF
+SET PAGESIZE 0
+SET SPACE 0
+SET TERMOUT OFF
+SET VERIFY OFF
+SET FEEDBACK OFF
+SET TRIMS OFF
+set newpage none
+set underline off
+SET LINESIZE 32000
+SET LONGCHUNKSIZE 32000
+SET TRIMSPOOL ON
+SPOOL /home/oracle/df_desa.sql
+select 'ALTER DATABASE RENAME FILE '''||NAME||''' TO '''||REPLACE(NAME,'+DATA','+DATA_TMP')||'''; ' as sql FROM v$datafile;
+select 'ALTER DATABASE RENAME FILE '''||NAME||''' TO '''||REPLACE(NAME,'+DATA','+DATA_TMP')||'''; ' as sql FROM v$tempfile;
+Paso 15. Abrimos la base de datos.
+Paso 16. Creamos un SPFILE a partir del pfile:
+					create spfile='+DATA_TMP' from pfile='ruta_pfile';
+Paso 17. Se puede consultar las rutas de todos los archivos de la base de datos:
+					dba_data_files
+					dba_temp_files
+					v$logfiles
+Paso 16. Bajamos la base de datos, para cambiar los valores de:
+					srvctl config database -d orcl
+Paso 17. Creamo un nuevo archivo de password para la base de datos ( ORCL ):
+					orapwd file='+data_tmp/ORCL/PASSWORD/orapwdb' dbuniquename='orcl'
+Paso 19. Actualizamos los disk group asociados a la base de datos:
+					srvctl modify database -d orcl -a "DATA_TMP,FRA"
+Paso 20. Consultamos los nuevos valores:				
+					srvctl config database -d orcl
+Paso 21. Iniciamos la base de datos:
+					srvctl start database -d orcl
+Paso 22. Eliminamos los recursos disk group que fueron renombramos:
+					crsctl stat res -t
+					srvctl remove diskgroup -diskgroup DATA
