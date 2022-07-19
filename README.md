@@ -1,2 +1,2 @@
 # DBA
-Scripts, steps, tips and more
+Scripts for DBAs
